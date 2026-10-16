@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body { @apply bg-paper font-sans text-ink antialiased; }
+  h1, h2, h3 { @apply font-display; }
+  :focus-visible { outline: 2px solid #0F8B8D; outline-offset: 2px; }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-teal text-white hover:bg-teal-dark; }
+  .btn-ghost { @apply btn border border-ink/15 bg-white text-ink hover:bg-ink/5; }
+  .btn-danger { @apply btn bg-rose text-white hover:opacity-90; }
+  .input { @apply w-full rounded-lg border border-ink/15 bg-white px-3.5 py-2.5 text-sm placeholder:text-ink-500/60 focus:border-teal focus:outline-none focus:ring-2 focus:ring-teal/20; }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink-600; }
+  .panel { @apply rounded-xl border border-ink/10 bg-white; }
+}
+
+/* The one signature moment: the scan line inside the viewfinder */
+@keyframes sweep { 0% { top: 6%; } 50% { top: 92%; } 100% { top: 6%; } }
+.scan-line { animation: sweep 3.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .scan-line { animation: none; top: 50%; } }
