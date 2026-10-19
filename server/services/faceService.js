@@ -45,4 +45,15 @@ async function verify(personId, descriptor, threshold) {
   return dmin <= threshold ? { match: true, id: p.id, distance: dmin } : { match: false };
 }
 
-module.exports = { identify, verify, invalidate, validDescriptor };
+const mean = (list) => list[0].map((_, i) => list.reduce((s, d) => s + d[i], 0) / list.length);
+
+// A scan is 1 to 5 consecutive frames. Averaging them removes frame-to-frame noise, which is the biggest
+// reason a real person fails to match. Frames that do not look like one face are rejected as unsteady.
+function readScan(body) {
+  const list = Array.isArray(body.descriptors) ? body.descriptors : body.descriptor ? [body.descriptor] : null;
+  if (!list || list.length < 1 || list.length > 5 || !list.every(validDescriptor)) return { invalid: true };
+  for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) if (distance(list[i], list[j]) > 0.55) return { unsteady: true };
+  return { descriptor: mean(list) };
+}
+
+module.exports = { identify, verify, invalidate, validDescriptor, readScan };

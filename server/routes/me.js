@@ -5,7 +5,7 @@ const Settings = require('../models/Settings');
 const { protect, personOnly } = require('../middleware/auth');
 const { buildRange, summarize } = require('../services/attendanceService');
 const { processScan } = require('../services/scanService');
-const { verify, validDescriptor } = require('../services/faceService');
+const { verify, readScan } = require('../services/faceService');
 const { nowInfo, isDay, addDays } = require('../utils/time');
 const audit = require('../services/audit');
 
@@ -37,8 +37,10 @@ router.post('/mark', async (req, res, next) => {
   try {
     const settings = await Settings.get();
     if (!settings.selfMarking) return res.status(403).json({ message: 'Self-marking is switched off. Use the attendance terminal.' });
-    if (!validDescriptor(req.body.descriptor)) return res.status(400).json({ message: 'Invalid face data' });
-    const v = await verify(req.user.person, req.body.descriptor, settings.matchThreshold);
+    const scan = readScan(req.body);
+    if (scan.invalid) return res.status(400).json({ message: 'Invalid face data' });
+    if (scan.unsteady) return res.status(400).json({ message: 'The view was unsteady. Hold still and try again.' });
+    const v = await verify(req.user.person, scan.descriptor, settings.matchThreshold);
     if (v.noFace) return res.status(409).json({ message: 'No face is enrolled for you yet. Ask your admin or HR.' });
     if (!v.match) {
       audit(req, 'attendance.self_mark_rejected', { targetType: 'self' });

@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Play, Square } from 'lucide-react';
 import api, { errMsg } from '../lib/api';
-import { detectAll, loadFaceModels } from '../lib/face';
+import { detectAll, frameQuality, loadFaceModels, mainFace } from '../lib/face';
 import { fmtHours } from '../lib/format';
 import useCamera from '../lib/useCamera';
 import { PageHeader } from '../components/ui.jsx';
 
-const SEND_EVERY_MS = 2500; // the camera sends one fresh face at most this often
+const SEND_EVERY_MS = 2000; // after a result, wait this long before sending the next face
+const BURST = 3; // average this many consecutive good frames: far steadier than a single frame
 const LOG_COOLDOWN_MS = 3 * 60 * 1000;
 
 const ACTIONS = {
@@ -29,18 +30,26 @@ export default function Scanner() {
   const logSeen = useRef(new Map());
   const labelRef = useRef({ text: 'Scanning…', until: 0, color: '#E8A33D' });
   const modeRef = useRef('auto');
+  const burstRef = useRef([]);
+  const hintRef = useRef('');
 
   const [status, setStatus] = useState('idle'); // idle | loading | running
   const [mode, setMode] = useState('auto');
   const [log, setLog] = useState([]);
   const [last, setLast] = useState(null);
+  const [hint, setHint] = useState('');
   modeRef.current = mode;
+  const showHint = (h) => { if (hintRef.current !== h) { hintRef.current = h; setHint(h); } };
 
   // The camera never holds anyone's stored face. It sends what it sees; the server says who it was.
-  const send = useCallback(async (descriptor) => {
+  const send = useCallback(async (descriptors) => {
     lastSend.current = Date.now();
     try {
-      const { data } = await api.post('/attendance/recognize', { descriptor, mode: modeRef.current });
+      const { data } = await api.post('/attendance/recognize', { descriptors, mode: modeRef.current });
+      if (data.action === 'unsteady') {
+        setLast({ text: 'Hold still for a moment and look at the camera.', tone: 'warn' });
+        return;
+      }
       if (data.action === 'unknown' || data.action === 'ambiguous') {
         labelRef.current = { text: data.action === 'unknown' ? 'Not recognised' : 'Try again', until: Date.now() + 2500, color: '#E8A33D' };
         setLast({ text: data.action === 'unknown' ? 'Face not recognised' : 'Could not tell clearly. Look straight at the camera.', tone: 'warn' });
@@ -76,9 +85,9 @@ export default function Scanner() {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (!dets.length) return;
+      if (!dets.length) { burstRef.current = []; showHint('Step in front of the camera and look at it.'); return; }
 
-      const big = dets.reduce((a, b) => (b.detection.box.area > a.detection.box.area ? b : a));
+      const { face: big, crowded } = mainFace(dets);
       const fresh = Date.now() < labelRef.current.until;
       for (const d of dets) {
         const { x, y, width, height } = d.detection.box;
@@ -95,7 +104,16 @@ export default function Scanner() {
           ctx.fillText(text, mx + 8, y - 8);
         }
       }
-      if (Date.now() - lastSend.current > SEND_EVERY_MS) send(Array.from(big.descriptor));
+      // Only sharp, well-lit, centred frames count, and the person is coached when they are not
+      const q = frameQuality(video, big);
+      if (crowded) { burstRef.current = []; showHint('One person at a time, please.'); return; }
+      if (!q.ok) { burstRef.current = []; showHint(q.hint); return; }
+      showHint('');
+      burstRef.current.push(Array.from(big.descriptor));
+      if (burstRef.current.length >= BURST && Date.now() - lastSend.current > SEND_EVERY_MS) {
+        const batch = burstRef.current.splice(0, BURST);
+        send(batch);
+      } else if (burstRef.current.length > BURST) burstRef.current.shift();
     } finally {
       busyRef.current = false;
     }
@@ -106,6 +124,7 @@ export default function Scanner() {
     try {
       await loadFaceModels();
       logSeen.current = new Map();
+      burstRef.current = [];
       await start();
       setStatus('running');
     } catch (err) {
@@ -146,6 +165,9 @@ export default function Scanner() {
               <span key={c} className={`pointer-events-none absolute h-10 w-10 rounded-sm border-white/80 ${c}`} />
             ))}
             {status !== 'running' && <div className="absolute inset-0 grid place-items-center px-8 text-center text-sm text-white/70">{error || 'Camera is off. Choose Start camera to begin.'}</div>}
+            {status === 'running' && hint && (
+              <div className="absolute inset-x-4 top-4 rounded-lg bg-amber px-4 py-2 text-center text-sm font-semibold text-ink" role="status" aria-live="polite">{hint}</div>
+            )}
             {status === 'running' && last && (
               <div className={`absolute inset-x-4 bottom-4 rounded-lg px-4 py-2.5 text-center text-sm font-semibold ${last.tone === 'ok' ? 'bg-teal text-white' : 'bg-amber text-ink'}`} role="status" aria-live="polite">{last.text}</div>
             )}

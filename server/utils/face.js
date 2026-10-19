@@ -24,7 +24,7 @@ const bestDistance = (submitted, stored) => {
   return Math.min(...stored.map((s) => dist(avg, s)));
 };
 
-const threshold = () => Number(process.env.FACE_LOGIN_THRESHOLD || 0.45);
+const threshold = () => Number(process.env.FACE_LOGIN_THRESHOLD || 0.5);
 const faceRequired = () => (process.env.FACE_LOGIN_REQUIRED || 'true') !== 'false';
 const proofMinutes = () => Number(process.env.FACE_PROOF_MINUTES || 3);
 

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ScanFace } from 'lucide-react';
 import api, { errMsg } from '../lib/api';
-import { detectOne, loadFaceModels } from '../lib/face';
+import { detectAll, frameQuality, loadFaceModels, mainFace } from '../lib/face';
 import useCamera from '../lib/useCamera';
 import { fmtDate, fmtHours, outNote } from '../lib/format';
 import { Modal, PageHeader, Stat, StatusBadge } from '../components/ui.jsx';
@@ -35,9 +35,21 @@ function SelfMark({ onClose, onDone }) {
     setBusy(true);
     setResult('');
     try {
-      const det = await detectOne(videoRef.current);
-      if (!det) return setResult('No face found. Look at the camera in good light.');
-      const { data } = await api.post('/me/mark', { descriptor: Array.from(det.descriptor), mode: 'auto' });
+      // three clear frames, averaged, are far more reliable than one
+      const got = [];
+      const t0 = Date.now();
+      while (got.length < 3 && Date.now() - t0 < 12000) {
+        const { face, crowded } = mainFace(await detectAll(videoRef.current));
+        if (!face) { setResult('No face found. Look at the camera.'); continue; }
+        if (crowded) { setResult('Only you in the frame, please.'); continue; }
+        const q = frameQuality(videoRef.current, face);
+        if (!q.ok) { setResult(q.hint); continue; }
+        setResult('Hold still…');
+        got.push(Array.from(face.descriptor));
+        await new Promise((r) => setTimeout(r, 180));
+      }
+      if (got.length < 3) return setResult('Could not get a clear view. Check the light and try again.');
+      const { data } = await api.post('/me/mark', { descriptors: got, mode: 'auto' });
       setResult((RESULT[data.action] || (() => 'Done'))(data));
       onDone();
     } catch (err) {

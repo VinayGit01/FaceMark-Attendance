@@ -11,7 +11,7 @@ const { protect, allow } = require('../middleware/auth');
 const { validate } = require('../middleware/error');
 const { buildRange, summarize } = require('../services/attendanceService');
 const { processScan, applyManual } = require('../services/scanService');
-const { identify, validDescriptor } = require('../services/faceService');
+const { identify, readScan } = require('../services/faceService');
 const { personFilter, inScope, can } = require('../config/permissions');
 const audit = require('../services/audit');
 const { hhmm, nowInfo, isDay, addDays, weekRange, monthRange } = require('../utils/time');
@@ -26,9 +26,11 @@ const idsIn = async (filter) => (filter ? Student.find(filter).distinct('_id') :
 /* ---------- Terminal: the camera sends ONE fresh face descriptor; the server decides who it is ---------- */
 router.post('/recognize', allow('attendance.terminal'), async (req, res, next) => {
   try {
-    if (!validDescriptor(req.body.descriptor)) return res.status(400).json({ message: 'Invalid face data' });
+    const scan = readScan(req.body);
+    if (scan.invalid) return res.status(400).json({ message: 'Invalid face data' });
+    if (scan.unsteady) return res.json({ action: 'unsteady' });
     const settings = await Settings.get();
-    const m = await identify(req.body.descriptor, settings.matchThreshold);
+    const m = await identify(scan.descriptor, settings.matchThreshold);
     if (!m.match) return res.json({ action: m.ambiguous ? 'ambiguous' : 'unknown' });
     const r = await processScan({ personId: m.id, mode: req.body.mode, confidence: Math.max(0, 1 - m.distance), userId: req.user._id, settings });
     res.status(r.code).json(r.body);

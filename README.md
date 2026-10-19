@@ -161,6 +161,17 @@ On first start the server upgrades the database automatically: old `teacher` acc
 | Audit | `GET /audit` (needs `audit.view`) |
 | Settings | `GET /settings`, `PUT /settings` (rules need `settings.manage`; face settings need `biometric.settings` + face scan) |
 
+## Getting a reliable face scan
+
+The scanner coaches you on screen ("Too dark", "Move closer", "Centre your face", "Light is behind you") and only counts clear frames. If a scan still struggles:
+
+1. **Light on the face, not behind it.** Face a window or lamp. A bright window behind you is the most common cause of failure.
+2. **Arm's length from the camera**, face roughly in the middle of the frame, glasses and hair off the eyes if possible.
+3. **Close other apps or tabs using the camera** (Zoom, Teams, another browser tab). The screen says so when the camera is busy.
+4. **Enrol well.** Capture in the same kind of light you will be scanned in, and follow the head-turn prompts. Six samples in different positions recognise far better than one straight-on pose. Use *People → face icon* to re-capture anyone who gets missed.
+5. **Liveness is a blink *or* a slow head turn**, whichever you manage first.
+6. **Tuning:** terminal strictness is in *Settings → Face recognition*. Sign-in strictness is `FACE_LOGIN_THRESHOLD` in `server/.env` (now `0.5`; if you keep an old `.env`, change `0.45` to `0.5`). Lower means stricter. If a stranger is ever accepted, lower it. If real people are rejected, raise it a little, to `0.55` at most.
+
 ## Notes
 
 - Times are computed on the **server** in the organisation timezone (default `Asia/Kolkata`, change in Settings), so a wrong laptop clock cannot change attendance.
